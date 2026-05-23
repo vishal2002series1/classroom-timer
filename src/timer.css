@@ -1,0 +1,177 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+body {
+  background: transparent;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+
+button {
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
+.hidden { display: none !important; }
+
+/* ── CIRCULAR ── */
+#circular-widget {
+  position: relative;
+  width: 320px;
+  height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#dial {
+  display: block;
+}
+
+#center-display {
+  position: absolute;
+  top: 148px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+#time-display {
+  font-size: 2.6rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+  letter-spacing: 2px;
+}
+
+/* Controls sit BELOW the circle */
+#controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  background: rgba(15,15,25,0.75);
+  border-radius: 30px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+#controls button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.12);
+  color: white;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+
+#controls button:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+/* ── BAR ── */
+#bar-widget {
+  width: 100vw;
+  height: 56px;
+  position: relative;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+#bar-segments {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0; left: 0;
+}
+
+.bar-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-right: 1px solid rgba(0,0,0,0.3);
+  transition: filter 0.4s;
+}
+
+.bar-segment.dimmed {
+  filter: brightness(0.35);
+}
+
+#bar-marker {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(255,255,255,0.8);
+  transition: left 0.8s linear;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#bar-time-overlay {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 11;
+  transition: left 0.8s linear;
+  white-space: nowrap;
+}
+
+#bar-controls {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 5px;
+  z-index: 20;
+}
+
+#bar-controls button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.12);
+  color: white;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#bar-controls button:hover {
+  background: rgba(255,255,255,0.3);
+}
+#btn-exit, #bar-btn-exit {
+  background: rgba(220, 50, 50, 0.3) !important;
+  color: #ff6b6b !important;
+}
+
+#btn-exit:hover, #bar-btn-exit:hover {
+  background: rgba(220, 50, 50, 0.7) !important;
+  color: #ffffff !important;
+}
