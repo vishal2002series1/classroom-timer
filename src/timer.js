@@ -30,6 +30,14 @@ let remainingSeconds = 0;
 let timerInterval = null;
 let isRunning = false;
 
+const MIN_CIRCULAR = 200;
+const MAX_CIRCULAR = 600;
+const MIN_BAR_HEIGHT = 40;
+const MAX_BAR_HEIGHT = 120;
+
+let circularSize = 320;
+let barHeight    = 56;
+
 // ── DOM refs ──
 const circularWidget  = document.getElementById('circular-widget');
 const barWidget       = document.getElementById('bar-widget');
@@ -60,6 +68,33 @@ function applySettings(s) {
   saveSettingsToDisk(s);
   applyMode();
   buildBarSegments();
+
+  // Restore saved sizes on every settings apply
+  if (s.circularSize) {
+  circularSize = s.circularSize;
+  canvas.width  = circularSize;
+  canvas.height = circularSize;
+  circularWidget.style.width  = `${circularSize}px`;
+  circularWidget.style.height = `${circularSize + 70}px`;
+  const centerDisplay = document.getElementById('center-display');
+  if (centerDisplay) {
+    centerDisplay.style.top = `${Math.round(circularSize * 0.46)}px`;
+  }
+  // ← ADD THIS
+  ipcRenderer.send('resize-window', {
+    width:  Math.round(circularSize),
+    height: Math.round(circularSize + 70)
+  });
+}
+  if (s.barHeight) {
+  barHeight = s.barHeight;
+  const bw = document.getElementById('bar-widget');
+  if (bw) bw.style.height = `${barHeight}px`;
+  if (s.mode === 'bar') {
+    ipcRenderer.send('resize-bar-window', { height: barHeight });
+  }
+}
+
   render();
 }
 
@@ -70,6 +105,9 @@ document.getElementById('bar-btn-mode').addEventListener('click', toggleMode);
 function toggleMode() {
   if (!settings) return;
   settings.mode = settings.mode === 'circular' ? 'bar' : 'circular';
+  // Save current sizes into settings before switching
+  settings.circularSize = circularSize;
+  settings.barHeight    = barHeight;
   saveSettingsToDisk(settings);
   ipcRenderer.send('switch-mode', settings);
 }
@@ -81,12 +119,7 @@ document.getElementById('bar-btn-gear').addEventListener('click', () => ipcRende
 document.getElementById('btn-exit').addEventListener('click', () => ipcRenderer.send('exit-app'));
 document.getElementById('bar-btn-exit').addEventListener('click', () => ipcRenderer.send('exit-app'));
 
-document.getElementById('btn-exit').addEventListener('click', () => {
-  ipcRenderer.send('exit-app');
-});
-document.getElementById('bar-btn-exit').addEventListener('click', () => {
-  ipcRenderer.send('exit-app');
-});
+
 
 // ── Playback controls ──
 document.getElementById('btn-start').addEventListener('click', startTimer);
@@ -201,196 +234,7 @@ function render() {
   }
 }
 
-// ── Draw circular dial with 4 quadrant labels ──
-// function drawDial(pct, currentZone) {
-//   const cx = 160, cy = 160;
-//   const outerR = 148, trackR = 128, innerR = 100;
-//   ctx.clearRect(0, 0, 320, 320);
 
-//   if (!settings) return;
-//   const zones = settings.zones;
-
-//   // Each zone occupies 25% = 90 degrees
-//   // Start from top (-90deg), go clockwise
-//   // zone[0] = first 90deg (12 o'clock → 3 o'clock)
-//   // zone[1] = 3 o'clock → 6 o'clock
-//   // zone[2] = 6 o'clock → 9 o'clock
-//   // zone[3] = 9 o'clock → 12 o'clock
-//   const segAngle = (Math.PI * 2) / 4;
-//   const startOffset = -Math.PI / 2;
-
-//   zones.forEach((zone, i) => {
-//     const segStart = startOffset + i * segAngle;
-//     const segEnd   = segStart + segAngle;
-
-//     // Outer ring segment
-//     ctx.beginPath();
-//     ctx.arc(cx, cy, outerR, segStart, segEnd);
-//     ctx.arc(cx, cy, trackR, segEnd, segStart, true);
-//     ctx.closePath();
-//     ctx.fillStyle = zone.color;
-//     ctx.fill();
-
-//     // Divider lines
-//     ctx.beginPath();
-//     ctx.moveTo(cx + trackR * Math.cos(segStart), cy + trackR * Math.sin(segStart));
-//     ctx.lineTo(cx + outerR * Math.cos(segStart), cy + outerR * Math.sin(segStart));
-//     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-//     ctx.lineWidth = 2;
-//     ctx.stroke();
-
-//     // Zone label on ring
-//     const labelAngle = segStart + segAngle / 2;
-//     const labelR     = (outerR + trackR) / 2;
-//     const lx = cx + labelR * Math.cos(labelAngle);
-//     const ly = cy + labelR * Math.sin(labelAngle);
-
-//     // ctx.save();
-//     // ctx.translate(lx, ly);
-//     // ctx.rotate(labelAngle + Math.PI / 2);
-//     // ctx.fillStyle = 'rgba(255,255,255,0.95)';
-//     // ctx.font = 'bold 11px Segoe UI, Arial';
-//     // ctx.textAlign = 'center';
-//     // ctx.textBaseline = 'middle';
-//     // ctx.fillText(zone.label.toUpperCase(), 0, 0);
-//     // ctx.restore();
-
-//     ctx.save();
-//     ctx.translate(lx, ly);
-//     // Keep text always readable — flip if in bottom half
-//     let angle = labelAngle + Math.PI / 2;
-//     if (labelAngle > Math.PI / 2 && labelAngle < Math.PI * 1.5) {
-//     angle += Math.PI;
-//     }
-//     ctx.rotate(angle);
-//     ctx.fillStyle = 'rgba(255,255,255,0.95)';
-//     ctx.font = 'bold 11px Segoe UI, Arial';
-//     ctx.textAlign = 'center';
-//     ctx.textBaseline = 'middle';
-//     ctx.fillText(zone.label.toUpperCase(), 0, 0);
-//     ctx.restore();
-
-//   });
-
-//   // Inner dark circle
-//   ctx.beginPath();
-//   ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-//   ctx.fillStyle = 'rgba(12,14,20,0.96)';
-//   ctx.fill();
-
-//   // Needle — sweeps from 12 o'clock clockwise
-//   // pct=1 means full time, needle at 12. pct=0 means done, needle back at 12
-//   // Needle sweeps full circle as time depletes
-//   const needleAngle = startOffset + (1 - pct) * Math.PI * 2;
-//   const needleLen   = trackR - 8;
-//   const nx = cx + needleLen * Math.cos(needleAngle);
-//   const ny = cy + needleLen * Math.sin(needleAngle);
-
-//   // Needle glow
-//   ctx.shadowColor = '#ffffff';
-//   ctx.shadowBlur  = 8;
-//   ctx.beginPath();
-//   ctx.moveTo(cx, cy);
-//   ctx.lineTo(nx, ny);
-//   ctx.strokeStyle = '#ffffff';
-//   ctx.lineWidth   = 2.5;
-//   ctx.lineCap     = 'round';
-//   ctx.stroke();
-//   ctx.shadowBlur = 0;
-
-//   // Center dot
-//   ctx.beginPath();
-//   ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-//   ctx.fillStyle = '#ffffff';
-//   ctx.fill();
-
-//   // Outer border
-//   ctx.beginPath();
-//   ctx.arc(cx, cy, outerR + 4, 0, Math.PI * 2);
-//   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-//   ctx.lineWidth   = 3;
-//   ctx.stroke();
-// }
-
-function drawDial(pct, currentZone) {
-  const cx = 160, cy = 150;
-  const outerR = 148, trackR = 100, innerR = 88;
-  ctx.clearRect(0, 0, 320, 320);
-
-  if (!settings) return;
-  const zones = settings.zones;
-  const segAngle   = (Math.PI * 2) / 4;
-  const startOffset = -Math.PI / 2;
-
-  // Draw 4 quadrant segments
-  zones.forEach((zone, i) => {
-    const segStart = startOffset + i * segAngle;
-    const segEnd   = segStart + segAngle;
-
-    // Ring segment
-    ctx.beginPath();
-    ctx.arc(cx, cy, outerR, segStart, segEnd);
-    ctx.arc(cx, cy, trackR, segEnd, segStart, true);
-    ctx.closePath();
-    ctx.fillStyle = zone.color;
-    ctx.fill();
-
-    // Divider lines
-    ctx.beginPath();
-    ctx.moveTo(
-      cx + trackR * Math.cos(segStart),
-      cy + trackR * Math.sin(segStart)
-    );
-    ctx.lineTo(
-      cx + outerR * Math.cos(segStart),
-      cy + outerR * Math.sin(segStart)
-    );
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Label — placed flat, no rotation
-    const labelAngle = segStart + segAngle / 2;
-    const labelR     = (outerR + trackR) / 2;
-    const lx = cx + labelR * Math.cos(labelAngle);
-    const ly = cy + labelR * Math.sin(labelAngle);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.font = 'bold 12px Segoe UI, Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(zone.label.toUpperCase(), lx, ly);
-  });
-
-  // Inner dark circle
-  ctx.beginPath();
-  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(12,14,20,0.97)';
-  ctx.fill();
-
-  // Needle
-  const needleAngle = startOffset + (1 - pct) * Math.PI * 2;
-  const needleLen   = outerR - 4;
-  const nx = cx + needleLen * Math.cos(needleAngle);
-  const ny = cy + needleLen * Math.sin(needleAngle);
-
-  ctx.shadowColor = '#ffffff';
-  ctx.shadowBlur  = 10;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(nx, ny);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth   = 2.5;
-  ctx.lineCap     = 'round';
-  ctx.stroke();
-  ctx.shadowBlur  = 0;
-
-  // Center dot
-  ctx.beginPath();
-  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
-}
 
 // ── Render bar ──
 function renderBar(pct, currentZone, formatted) {
@@ -433,3 +277,181 @@ function renderBar(pct, currentZone, formatted) {
   overlayLeft = Math.max(4, Math.min(overlayLeft, barW - overlayW - 4));
   barTimeOverlay.style.left = `${overlayLeft}px`;
 }
+
+// ── RESIZE LOGIC ──
+
+
+
+function applyCircularSize(size) {
+  circularSize = Math.max(MIN_CIRCULAR, Math.min(MAX_CIRCULAR, size));
+
+  // Resize canvas properly — no CSS transform
+  canvas.width  = circularSize;
+  canvas.height = Math.round(circularSize);
+//   canvas.height = Math.round(circularSize * 0.94);
+
+  // Resize the widget container
+  circularWidget.style.width  = `${circularSize}px`;
+  circularWidget.style.height = `${circularSize + 70}px`;
+
+  // Reposition center display
+  const centerDisplay = document.getElementById('center-display');
+  centerDisplay.style.top = `${Math.round(circularSize * 0.46)}px`;
+
+  // Tell main process to resize the window
+  ipcRenderer.send('resize-window', {
+  width:  Math.round(circularSize),
+  height: Math.round(circularSize + 70)
+});
+
+  // Redraw with new canvas size
+  render();
+}
+
+function applyBarHeight(height) {
+  barHeight = Math.max(MIN_BAR_HEIGHT, Math.min(MAX_BAR_HEIGHT, height));
+  const bw = document.getElementById('bar-widget');
+  bw.style.height = `${barHeight}px`;
+  ipcRenderer.send('resize-bar-window', {
+    height: Math.round(barHeight)
+  });
+}
+
+// Also fix drawDial to use dynamic canvas size
+function getDialParams() {
+  const size   = canvas.width  || 320;
+  const height = canvas.height || 300;
+  const cx     = size / 2;
+  const cy     = height / 2;
+  const outerR = size * 0.46;
+  const trackR = size * 0.31;
+  const innerR = size * 0.275;
+  return { cx, cy, outerR, trackR, innerR, size, height };
+}
+
+// ── OVERRIDE drawDial to use dynamic params ──
+function drawDial(pct, currentZone) {
+  const { cx, cy, outerR, trackR, innerR, size, height } = getDialParams();
+  ctx.clearRect(0, 0, size, height);
+
+  if (!settings) return;
+  const zones       = settings.zones;
+  const segAngle    = (Math.PI * 2) / 4;
+  const startOffset = -Math.PI / 2;
+
+  zones.forEach((zone, i) => {
+    const segStart = startOffset + i * segAngle;
+    const segEnd   = segStart + segAngle;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, segStart, segEnd);
+    ctx.arc(cx, cy, trackR, segEnd, segStart, true);
+    ctx.closePath();
+    ctx.fillStyle = zone.color;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(cx + trackR * Math.cos(segStart), cy + trackR * Math.sin(segStart));
+    ctx.lineTo(cx + outerR * Math.cos(segStart), cy + outerR * Math.sin(segStart));
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth   = 2.5;
+    ctx.stroke();
+
+    const labelAngle = segStart + segAngle / 2;
+    const labelR     = (outerR + trackR) / 2;
+    const lx = cx + labelR * Math.cos(labelAngle);
+    const ly = cy + labelR * Math.sin(labelAngle);
+
+    ctx.fillStyle    = 'rgba(255,255,255,0.95)';
+    ctx.font         = `bold ${Math.round(size * 0.038)}px Segoe UI, Arial`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(zone.label.toUpperCase(), lx, ly);
+  });
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(12,14,20,0.97)';
+  ctx.fill();
+
+  const needleAngle = startOffset + (1 - pct) * Math.PI * 2;
+  const needleLen   = outerR - 4;
+  const nx = cx + needleLen * Math.cos(needleAngle);
+  const ny = cy + needleLen * Math.sin(needleAngle);
+
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur  = 10;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(nx, ny);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth   = 2.5;
+  ctx.lineCap     = 'round';
+  ctx.stroke();
+  ctx.shadowBlur  = 0;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+}
+
+// Circular resize drag
+const resizeGrip = document.getElementById('resize-grip');
+let isResizing      = false;
+let resizeStartX    = 0;
+let resizeStartSize = 320;
+
+resizeGrip.addEventListener('mousedown', (e) => {
+  isResizing      = true;
+  resizeStartX    = e.screenX;
+  resizeStartSize = circularSize;
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizing) return;
+  const delta = e.screenX - resizeStartX;
+  applyCircularSize(resizeStartSize + delta);
+});
+
+document.addEventListener('mouseup', () => {
+  if (!isResizing) return;
+  isResizing = false;
+  if (settings) {
+    settings.circularSize = circularSize;
+    saveSettingsToDisk(settings);
+  }
+});
+
+// Bar resize drag
+const barResizeGrip = document.getElementById('bar-resize-grip');
+let isResizingBar   = false;
+let barResizeStartY = 0;
+let barResizeStartH = 56;
+
+barResizeGrip.addEventListener('mousedown', (e) => {
+  isResizingBar   = true;
+  barResizeStartY = e.screenY;
+  barResizeStartH = barHeight;
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizingBar) return;
+  const delta = e.screenY - barResizeStartY;
+  applyBarHeight(barResizeStartH + delta);
+});
+
+document.addEventListener('mouseup', () => {
+  if (!isResizingBar) return;
+  isResizingBar = false;
+  if (settings) {
+    settings.barHeight = barHeight;
+    saveSettingsToDisk(settings);
+  }
+});
+
+// Apply saved sizes on load
+if (settings?.circularSize) applyCircularSize(settings.circularSize);
+if (settings?.barHeight)    applyBarHeight(settings.barHeight);

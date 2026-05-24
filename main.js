@@ -23,8 +23,8 @@ function createTimerWindow() {
   const isBar = currentSettings.mode === 'bar';
 
   timerWindow = new BrowserWindow({
-    width: isBar ? screenWidth : 320,
-    height: isBar ? 56 : 380,
+    width:  isBar ? screenWidth : (currentSettings.circularSize || 320),
+    height: isBar ? (currentSettings.barHeight || 56) : ((currentSettings.circularSize || 320) + 70),
     x: isBar ? 0 : 40,
     y: isBar ? 0 : 40,
     frame: false,
@@ -146,6 +146,20 @@ ipcMain.on('switch-mode', (event, newSettings) => {
     isRebuildingWindow = false;
     createTimerWindow();
   }, 150);
+});
+
+ipcMain.on('resize-window', (event, { width, height }) => {
+  if (timerWindow) {
+    timerWindow.setSize(Math.round(width), Math.round(height));
+  }
+});
+
+ipcMain.on('resize-bar-window', (event, { height }) => {
+  if (timerWindow) {
+    const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
+    timerWindow.setSize(screenWidth, Math.round(height));
+    timerWindow.setPosition(0, 0);
+  }
 });
 
 ipcMain.on('exit-app', () => {
