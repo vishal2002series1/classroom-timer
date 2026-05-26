@@ -11,10 +11,10 @@ let currentSettings = {
   duration: 60,
   sound: true,
   zones: [
-    { label: 'Relax', threshold: 75, color: '#27ae60' },
-    { label: 'Focus', threshold: 50, color: '#f39c12' },
-    { label: 'Hurry', threshold: 25, color: '#e67e22' },
-    { label: 'Now!',  threshold: 0,  color: '#e74c3c' }
+    { label: 'Exam Topper',     threshold: 75, color: '#27ae60' },
+    { label: 'Exam Qualifier',  threshold: 50, color: '#f39c12' },
+    { label: '50-50 Chance',    threshold: 25, color: '#e67e22' },
+    { label: 'Need To Improve', threshold: 0,  color: '#e74c3c' }
   ]
 };
 
@@ -22,9 +22,13 @@ function createTimerWindow() {
   const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
   const isBar = currentSettings.mode === 'bar';
 
+  const MIN_WINDOW_WIDTH = 460; // keep in sync with timer.js
+  const BAR_CONTROLS_H   = 40;  // height reserved for the bar's controls row
+  const dialSize = currentSettings.circularSize || 320;
+  const stripH   = currentSettings.barHeight || 56;
   timerWindow = new BrowserWindow({
-    width:  isBar ? screenWidth : (currentSettings.circularSize || 320),
-    height: isBar ? (currentSettings.barHeight || 56) : ((currentSettings.circularSize || 320) + 70),
+    width:  isBar ? screenWidth : Math.max(MIN_WINDOW_WIDTH, dialSize),
+    height: isBar ? (stripH + BAR_CONTROLS_H) : (dialSize + 70),
     x: isBar ? 0 : 40,
     y: isBar ? 0 : 40,
     frame: false,
@@ -156,8 +160,9 @@ ipcMain.on('resize-window', (event, { width, height }) => {
 
 ipcMain.on('resize-bar-window', (event, { height }) => {
   if (timerWindow) {
+    const BAR_CONTROLS_H = 40; // matches createTimerWindow
     const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
-    timerWindow.setSize(screenWidth, Math.round(height));
+    timerWindow.setSize(screenWidth, Math.round(height) + BAR_CONTROLS_H);
     timerWindow.setPosition(0, 0);
   }
 });

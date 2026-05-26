@@ -78,10 +78,10 @@ function updateDurationDisplay() {
 
 function save() {
   const zones = [
-    { label: document.getElementById('zone-0').value || 'Relax',  threshold: 75, color: '#27ae60' },
-    { label: document.getElementById('zone-1').value || 'Focus',  threshold: 50, color: '#f39c12' },
-    { label: document.getElementById('zone-2').value || 'Hurry',  threshold: 25, color: '#e67e22' },
-    { label: document.getElementById('zone-3').value || 'Now!',   threshold: 0,  color: '#e74c3c' },
+    { label: document.getElementById('zone-0').value || 'Exam Topper',     threshold: 75, color: '#27ae60' },
+    { label: document.getElementById('zone-1').value || 'Exam Qualifier',  threshold: 50, color: '#f39c12' },
+    { label: document.getElementById('zone-2').value || '50-50 Chance',    threshold: 25, color: '#e67e22' },
+    { label: document.getElementById('zone-3').value || 'Need To Improve', threshold: 0,  color: '#e74c3c' },
   ];
 
   const newSettings = {

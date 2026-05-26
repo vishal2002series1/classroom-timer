@@ -35,8 +35,20 @@ const MAX_CIRCULAR = 600;
 const MIN_BAR_HEIGHT = 40;
 const MAX_BAR_HEIGHT = 120;
 
+// Minimum window width for circular mode so the control pill never gets cut.
+// 8 buttons × 36px + 7 gaps × 8px + 24px padding + breathing room.
+// Kept generous to account for macOS rendering / button-text variance.
+const MIN_WINDOW_WIDTH = 460;
+
 let circularSize = 320;
 let barHeight    = 56;
+
+// Label font scale (1.0 = default). Applied to both circular curved labels
+// and the horizontal bar segment labels. Adjustable from the control pane.
+const FONT_SCALE_MIN  = 0.5;
+const FONT_SCALE_MAX  = 2.0;
+const FONT_SCALE_STEP = 0.1;
+let fontScale = 1.0;
 
 // ── DOM refs ──
 const circularWidget  = document.getElementById('circular-widget');
@@ -65,6 +77,13 @@ function applySettings(s) {
   remainingSeconds = s.duration;
   isRunning        = false;
   clearInterval(timerInterval);
+
+  // Restore font scale if previously saved.
+  if (typeof s.fontScale === 'number' && !isNaN(s.fontScale)) {
+    fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, s.fontScale));
+  }
+  applyBarFontScale();
+
   saveSettingsToDisk(s);
   applyMode();
   buildBarSegments();
@@ -80,20 +99,20 @@ function applySettings(s) {
   if (centerDisplay) {
     centerDisplay.style.top = `${Math.round(circularSize * 0.46)}px`;
   }
-  // ← ADD THIS
+  // Window width must fit either the dial or the control pill (whichever is wider).
   ipcRenderer.send('resize-window', {
-    width:  Math.round(circularSize),
+    width:  Math.max(MIN_WINDOW_WIDTH, Math.round(circularSize)),
     height: Math.round(circularSize + 70)
   });
 }
   if (s.barHeight) {
-  barHeight = s.barHeight;
-  const bw = document.getElementById('bar-widget');
-  if (bw) bw.style.height = `${barHeight}px`;
-  if (s.mode === 'bar') {
-    ipcRenderer.send('resize-bar-window', { height: barHeight });
+    barHeight = s.barHeight;
+    const strip = document.getElementById('bar-strip');
+    if (strip) strip.style.height = `${barHeight}px`;
+    if (s.mode === 'bar') {
+      ipcRenderer.send('resize-bar-window', { height: barHeight });
+    }
   }
-}
 
   render();
 }
@@ -118,6 +137,36 @@ document.getElementById('bar-btn-gear').addEventListener('click', () => ipcRende
 
 document.getElementById('btn-exit').addEventListener('click', () => ipcRenderer.send('exit-app'));
 document.getElementById('bar-btn-exit').addEventListener('click', () => ipcRenderer.send('exit-app'));
+
+// ── Font size controls (A− / A+) ──
+function applyBarFontScale() {
+  // Scale the .bar-segment text via CSS variable so it grows/shrinks live.
+  // Base size is 0.78rem (see timer.css). We override with inline style.
+  document.querySelectorAll('.bar-segment').forEach(el => {
+    el.style.fontSize = (0.78 * fontScale) + 'rem';
+  });
+}
+
+function changeFontScale(delta) {
+  fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, fontScale + delta));
+  // Round to 1 decimal to avoid float drift.
+  fontScale = Math.round(fontScale * 10) / 10;
+  applyBarFontScale();
+  if (settings) {
+    settings.fontScale = fontScale;
+    saveSettingsToDisk(settings);
+  }
+  render();
+}
+
+['btn-font-up', 'bar-btn-font-up'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', () => changeFontScale(+FONT_SCALE_STEP));
+});
+['btn-font-down', 'bar-btn-font-down'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', () => changeFontScale(-FONT_SCALE_STEP));
+});
 
 
 
@@ -217,6 +266,7 @@ function buildBarSegments() {
     seg.textContent = zone.label;
     barSegments.appendChild(seg);
   });
+  applyBarFontScale();
 }
 
 // ── Render ──
@@ -298,11 +348,12 @@ function applyCircularSize(size) {
   const centerDisplay = document.getElementById('center-display');
   centerDisplay.style.top = `${Math.round(circularSize * 0.46)}px`;
 
-  // Tell main process to resize the window
+  // Tell main process to resize the window. Width never drops below
+  // MIN_WINDOW_WIDTH so the control pill always fits.
   ipcRenderer.send('resize-window', {
-  width:  Math.round(circularSize),
-  height: Math.round(circularSize + 70)
-});
+    width:  Math.max(MIN_WINDOW_WIDTH, Math.round(circularSize)),
+    height: Math.round(circularSize + 70)
+  });
 
   // Redraw with new canvas size
   render();
@@ -310,8 +361,9 @@ function applyCircularSize(size) {
 
 function applyBarHeight(height) {
   barHeight = Math.max(MIN_BAR_HEIGHT, Math.min(MAX_BAR_HEIGHT, height));
-  const bw = document.getElementById('bar-widget');
-  bw.style.height = `${barHeight}px`;
+  // barHeight controls the colored strip; the controls row sits below it.
+  const strip = document.getElementById('bar-strip');
+  if (strip) strip.style.height = `${barHeight}px`;
   ipcRenderer.send('resize-bar-window', {
     height: Math.round(barHeight)
   });
@@ -327,6 +379,74 @@ function getDialParams() {
   const trackR = size * 0.31;
   const innerR = size * 0.275;
   return { cx, cy, outerR, trackR, innerR, size, height };
+}
+
+// Draw text along a circular arc centered at `midAngle` on a circle of
+// radius `radius` around (cx, cy). Text is auto-shrunk so its total arc
+// length fits within `maxAngle` (segment span) and the font height fits
+// within `maxHeight` (the ring band thickness).
+// Top-half labels read left→right with characters facing outward.
+// Bottom-half labels are drawn so they also read left→right (not upside-down).
+function drawCurvedLabel(text, cx, cy, radius, midAngle, maxAngle, preferredFont, maxHeight) {
+  const MIN_FONT   = 9;
+  const fontFamily = 'Segoe UI, Arial';
+  const PADDING    = 0.90; // leave a small gap from segment dividers
+
+  // Normalize midAngle into [-PI, PI).
+  let mid = midAngle;
+  while (mid >=  Math.PI) mid -= Math.PI * 2;
+  while (mid <  -Math.PI) mid += Math.PI * 2;
+  // Canvas y grows downward, so angles in (0, PI) are the bottom half.
+  const isBottom = mid > 0 && mid < Math.PI;
+
+  // Pick the largest font that fits both angularly and in band thickness.
+  let chosen = MIN_FONT;
+  for (let f = preferredFont; f >= MIN_FONT; f--) {
+    if (f * 1.1 > maxHeight) continue;
+    ctx.font = `bold ${f}px ${fontFamily}`;
+    const arcLen = ctx.measureText(text).width;
+    if (arcLen / radius <= maxAngle * PADDING) { chosen = f; break; }
+  }
+  ctx.font = `bold ${chosen}px ${fontFamily}`;
+
+  const chars  = Array.from(text);
+  const widths = chars.map(c => ctx.measureText(c).width);
+  const angles = widths.map(w => w / radius);
+  const totalArc = angles.reduce((s, a) => s + a, 0);
+
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (!isBottom) {
+    // Top half: walk clockwise (angle increasing) so text reads left→right.
+    let a = mid - totalArc / 2;
+    for (let i = 0; i < chars.length; i++) {
+      const ca = a + angles[i] / 2;
+      const x = cx + radius * Math.cos(ca);
+      const y = cy + radius * Math.sin(ca);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(ca + Math.PI / 2); // tangent, character upright facing outward
+      ctx.fillText(chars[i], 0, 0);
+      ctx.restore();
+      a += angles[i];
+    }
+  } else {
+    // Bottom half: walk counter-clockwise (angle decreasing) and flip each
+    // character 180° so the text reads left→right and isn't upside-down.
+    let a = mid + totalArc / 2;
+    for (let i = 0; i < chars.length; i++) {
+      const ca = a - angles[i] / 2;
+      const x = cx + radius * Math.cos(ca);
+      const y = cy + radius * Math.sin(ca);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(ca - Math.PI / 2);
+      ctx.fillText(chars[i], 0, 0);
+      ctx.restore();
+      a -= angles[i];
+    }
+  }
 }
 
 // ── OVERRIDE drawDial to use dynamic params ──
@@ -357,16 +477,21 @@ function drawDial(pct, currentZone) {
     ctx.lineWidth   = 2.5;
     ctx.stroke();
 
-    const labelAngle = segStart + segAngle / 2;
-    const labelR     = (outerR + trackR) / 2;
-    const lx = cx + labelR * Math.cos(labelAngle);
-    const ly = cy + labelR * Math.sin(labelAngle);
+    // Curved label: text arcs along the colored ring band.
+    const labelMidAngle = segStart + segAngle / 2;
+    const labelR        = (outerR + trackR) / 2;
 
-    ctx.fillStyle    = 'rgba(255,255,255,0.95)';
-    ctx.font         = `bold ${Math.round(size * 0.038)}px Segoe UI, Arial`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(zone.label.toUpperCase(), lx, ly);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+
+    drawCurvedLabel(
+      zone.label.toUpperCase(),
+      cx, cy,
+      labelR,
+      labelMidAngle,
+      segAngle,
+      Math.round(size * 0.06 * fontScale), // preferred font scaled by user A−/A+ control
+      (outerR - trackR)                    // radial band thickness (cap on font height)
+    );
   });
 
   ctx.beginPath();

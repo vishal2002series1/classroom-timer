@@ -18,6 +18,8 @@
       <button id="btn-start">▶</button>
       <button id="btn-pause">⏸</button>
       <button id="btn-reset">↺</button>
+      <button id="btn-font-down" title="Decrease label size" class="font-btn">A−</button>
+      <button id="btn-font-up"   title="Increase label size" class="font-btn">A+</button>
       <button id="btn-gear">⚙</button>
       <button id="btn-exit" title="Exit">✕</button>
     </div>
@@ -26,18 +28,22 @@
 
   <!-- BAR MODE -->
   <div id="bar-widget" class="hidden">
-    <div id="bar-segments"></div>
-    <div id="bar-marker"></div>
-    <div id="bar-time-overlay"></div>
+    <div id="bar-strip">
+      <div id="bar-segments"></div>
+      <div id="bar-marker"></div>
+      <div id="bar-time-overlay"></div>
+      <div id="bar-resize-grip" title="Drag to resize height">⠿</div>
+    </div>
     <div id="bar-controls">
       <button id="bar-btn-mode" title="Switch Mode">⇄</button>
       <button id="bar-btn-start">▶</button>
       <button id="bar-btn-pause">⏸</button>
       <button id="bar-btn-reset">↺</button>
+      <button id="bar-btn-font-down" title="Decrease label size" class="font-btn">A−</button>
+      <button id="bar-btn-font-up"   title="Increase label size" class="font-btn">A+</button>
       <button id="bar-btn-gear">⚙</button>
       <button id="bar-btn-exit" title="Exit">✕</button>
     </div>
-    <div id="bar-resize-grip" title="Drag to resize height">⠿</div>
   </div>
 
   <script src="timer.js"></script>

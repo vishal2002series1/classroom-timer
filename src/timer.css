@@ -51,7 +51,8 @@ button {
   letter-spacing: 2px;
 }
 
-/* Controls sit BELOW the circle */
+/* Controls sit BELOW the circle. Fixed width so the pill is always the
+   same size regardless of dial size — resizing the dial never affects it. */
 #controls {
   display: flex;
   gap: 8px;
@@ -61,6 +62,9 @@ button {
   border-radius: 30px;
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  width: 384px;          /* 8 × 36px buttons + 7 × 8px gaps + 24px padding */
+  flex: 0 0 auto;
+  justify-content: center;
 }
 
 #controls button {
@@ -78,13 +82,32 @@ button {
   background: rgba(255,255,255,0.3);
 }
 
+#controls .font-btn,
+#bar-controls .font-btn {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
 /* ── BAR ── */
+html, body { height: 100%; }
+
 #bar-widget {
   width: 100vw;
-  height: 56px;
+  height: 100vh;         /* fill the window; window height is set by main.js */
   position: relative;
   overflow: hidden;
   background: #0d1117;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The colored strip takes all available space above the controls row. */
+#bar-strip {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  overflow: hidden;
 }
 
 #bar-segments {
@@ -143,12 +166,13 @@ button {
 }
 
 #bar-controls {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: 0 0 40px;        /* fixed height; matches BAR_CONTROLS_H in main.js */
   display: flex;
-  gap: 5px;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: rgba(15,15,25,0.92);
   z-index: 20;
 }
 
@@ -202,12 +226,12 @@ button {
 #bar-resize-grip {
   position: absolute;
   bottom: 2px;
-  right: 50%;
-  transform: translateX(50%);
+  left: 50%;
+  transform: translateX(-50%);
   width: 40px;
-  height: 8px;
-  background: rgba(255,255,255,0.2);
-  border-radius: 4px;
+  height: 6px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 3px;
   cursor: ns-resize;
   -webkit-app-region: no-drag;
   transition: background 0.2s;
