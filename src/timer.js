@@ -34,14 +34,17 @@ const MIN_CIRCULAR = 200;
 const MAX_CIRCULAR = 600;
 const MIN_BAR_HEIGHT = 40;
 const MAX_BAR_HEIGHT = 120;
+const MIN_VERTICAL_WIDTH = 60;
+const MAX_VERTICAL_WIDTH = 240;
 
 // Minimum window width for circular mode so the control pill never gets cut.
 // 8 buttons × 36px + 7 gaps × 8px + 24px padding + breathing room.
 // Kept generous to account for macOS rendering / button-text variance.
 const MIN_WINDOW_WIDTH = 460;
 
-let circularSize = 320;
-let barHeight    = 56;
+let circularSize  = 320;
+let barHeight     = 56;
+let verticalWidth = 90;
 
 // Label font scale (1.0 = default). Applied to both circular curved labels
 // and the horizontal bar segment labels. Adjustable from the control pane.
@@ -53,12 +56,16 @@ let fontScale = 1.0;
 // ── DOM refs ──
 const circularWidget  = document.getElementById('circular-widget');
 const barWidget       = document.getElementById('bar-widget');
+const verticalWidget  = document.getElementById('vertical-widget');
 const timeDisplay     = document.getElementById('time-display');
 const canvas          = document.getElementById('dial');
 const ctx             = canvas.getContext('2d');
 const barSegments     = document.getElementById('bar-segments');
 const barMarker       = document.getElementById('bar-marker');
 const barTimeOverlay  = document.getElementById('bar-time-overlay');
+const verticalSegments    = document.getElementById('vertical-segments');
+const verticalMarker      = document.getElementById('vertical-marker');
+const verticalTimeOverlay = document.getElementById('vertical-time-overlay');
 
 // ── Boot: load from disk first, then ask main for any override ──
 const diskSettings = loadSettingsFromDisk();
@@ -87,6 +94,7 @@ function applySettings(s) {
   saveSettingsToDisk(s);
   applyMode();
   buildBarSegments();
+  buildVerticalSegments();
 
   // Restore saved sizes on every settings apply
   if (s.circularSize) {
@@ -113,6 +121,15 @@ function applySettings(s) {
       ipcRenderer.send('resize-bar-window', { height: barHeight });
     }
   }
+  if (s.verticalWidth) {
+    verticalWidth = s.verticalWidth;
+    if (s.mode === 'vertical' || s.mode === 'vertical-left') {
+      ipcRenderer.send('resize-vertical-window', {
+        width: verticalWidth,
+        side: s.mode === 'vertical-left' ? 'left' : 'right'
+      });
+    }
+  }
 
   render();
 }
@@ -120,13 +137,18 @@ function applySettings(s) {
 // ── Mode toggle (on widget) ──
 document.getElementById('btn-mode').addEventListener('click', toggleMode);
 document.getElementById('bar-btn-mode').addEventListener('click', toggleMode);
+document.getElementById('vert-btn-mode').addEventListener('click', toggleMode);
 
 function toggleMode() {
   if (!settings) return;
-  settings.mode = settings.mode === 'circular' ? 'bar' : 'circular';
+  // Cycle: circular → bar → vertical (right) → vertical (left) → circular
+  const order = ['circular', 'bar', 'vertical', 'vertical-left'];
+  const idx   = order.indexOf(settings.mode);
+  settings.mode = order[(idx + 1) % order.length];
   // Save current sizes into settings before switching
-  settings.circularSize = circularSize;
-  settings.barHeight    = barHeight;
+  settings.circularSize  = circularSize;
+  settings.barHeight     = barHeight;
+  settings.verticalWidth = verticalWidth;
   saveSettingsToDisk(settings);
   ipcRenderer.send('switch-mode', settings);
 }
@@ -134,9 +156,11 @@ function toggleMode() {
 // ── Gear ──
 document.getElementById('btn-gear').addEventListener('click', () => ipcRenderer.send('open-settings'));
 document.getElementById('bar-btn-gear').addEventListener('click', () => ipcRenderer.send('open-settings'));
+document.getElementById('vert-btn-gear').addEventListener('click', () => ipcRenderer.send('open-settings'));
 
 document.getElementById('btn-exit').addEventListener('click', () => ipcRenderer.send('exit-app'));
 document.getElementById('bar-btn-exit').addEventListener('click', () => ipcRenderer.send('exit-app'));
+document.getElementById('vert-btn-exit').addEventListener('click', () => ipcRenderer.send('exit-app'));
 
 // ── Font size controls (A− / A+) ──
 function applyBarFontScale() {
@@ -147,11 +171,17 @@ function applyBarFontScale() {
   });
 }
 
+function applyVerticalFontScale() {
+  document.querySelectorAll('.vertical-segment').forEach(el => {
+    el.style.fontSize = (0.78 * fontScale) + 'rem';
+  });
+}
+
 function changeFontScale(delta) {
   fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, fontScale + delta));
-  // Round to 1 decimal to avoid float drift.
   fontScale = Math.round(fontScale * 10) / 10;
   applyBarFontScale();
+  applyVerticalFontScale();
   if (settings) {
     settings.fontScale = fontScale;
     saveSettingsToDisk(settings);
@@ -159,11 +189,11 @@ function changeFontScale(delta) {
   render();
 }
 
-['btn-font-up', 'bar-btn-font-up'].forEach(id => {
+['btn-font-up', 'bar-btn-font-up', 'vert-btn-font-up'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', () => changeFontScale(+FONT_SCALE_STEP));
 });
-['btn-font-down', 'bar-btn-font-down'].forEach(id => {
+['btn-font-down', 'bar-btn-font-down', 'vert-btn-font-down'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', () => changeFontScale(-FONT_SCALE_STEP));
 });
@@ -173,10 +203,13 @@ function changeFontScale(delta) {
 // ── Playback controls ──
 document.getElementById('btn-start').addEventListener('click', startTimer);
 document.getElementById('bar-btn-start').addEventListener('click', startTimer);
+document.getElementById('vert-btn-start').addEventListener('click', startTimer);
 document.getElementById('btn-pause').addEventListener('click', pauseTimer);
 document.getElementById('bar-btn-pause').addEventListener('click', pauseTimer);
+document.getElementById('vert-btn-pause').addEventListener('click', pauseTimer);
 document.getElementById('btn-reset').addEventListener('click', resetTimer);
 document.getElementById('bar-btn-reset').addEventListener('click', resetTimer);
+document.getElementById('vert-btn-reset').addEventListener('click', resetTimer);
 
 function startTimer() {
   if (isRunning) return;
@@ -225,11 +258,27 @@ function onTimerEnd() {
 // ── Apply mode ──
 function applyMode() {
   if (!settings) return;
+  circularWidget.classList.add('hidden');
+  barWidget.classList.add('hidden');
+  verticalWidget.classList.add('hidden');
   if (settings.mode === 'bar') {
-    circularWidget.classList.add('hidden');
     barWidget.classList.remove('hidden');
+  } else if (settings.mode === 'vertical' || settings.mode === 'vertical-left') {
+    verticalWidget.classList.remove('hidden');
+    // Move the resize grip to the inward-facing edge so dragging always widens.
+    const grip = document.getElementById('vertical-resize-grip');
+    if (grip) {
+      if (settings.mode === 'vertical-left') {
+        grip.style.left = 'auto';
+        grip.style.right = '2px';
+        grip.style.cursor = 'ew-resize';
+      } else {
+        grip.style.right = 'auto';
+        grip.style.left = '2px';
+        grip.style.cursor = 'ew-resize';
+      }
+    }
   } else {
-    barWidget.classList.add('hidden');
     circularWidget.classList.remove('hidden');
   }
 }
@@ -269,6 +318,21 @@ function buildBarSegments() {
   applyBarFontScale();
 }
 
+// Vertical segments: zone[0] = top (most time), zone[3] = bottom (least time).
+function buildVerticalSegments() {
+  verticalSegments.innerHTML = '';
+  if (!settings) return;
+  settings.zones.forEach((zone, i) => {
+    const seg = document.createElement('div');
+    seg.className = 'vertical-segment';
+    seg.id = `vseg-${i}`;
+    seg.style.background = zone.color;
+    seg.textContent = zone.label;
+    verticalSegments.appendChild(seg);
+  });
+  applyVerticalFontScale();
+}
+
 // ── Render ──
 function render() {
   if (!settings) return;
@@ -279,9 +343,33 @@ function render() {
   if (settings.mode === 'circular') {
     timeDisplay.textContent = formatted;
     drawDial(pct, zone);
+  } else if (settings.mode === 'vertical') {
+    renderVertical(pct, zone, formatted);
   } else {
     renderBar(pct, zone, formatted);
   }
+}
+
+// ── Render vertical ──
+function renderVertical(pct, currentZone, formatted) {
+  if (!settings) return;
+  const currentPct = pct * 100;
+  settings.zones.forEach((zone, i) => {
+    const seg = document.getElementById(`vseg-${i}`);
+    if (!seg) return;
+    const isPast = currentPct < zone.threshold;
+    seg.classList.toggle('dimmed', isPast);
+  });
+  // Marker moves top→bottom as time runs out (pct=1 → top=0%, pct=0 → top=100%)
+  const strip = document.getElementById('vertical-strip');
+  const stripH = strip ? strip.offsetHeight : window.innerHeight;
+  const markerTop = (1 - pct) * stripH;
+  verticalMarker.style.top = `${markerTop}px`;
+  verticalTimeOverlay.textContent = formatted;
+  const overlayH = 24;
+  let overlayTop = markerTop - overlayH / 2;
+  overlayTop = Math.max(4, Math.min(overlayTop, stripH - overlayH - 4));
+  verticalTimeOverlay.style.top = `${overlayTop}px`;
 }
 
 
@@ -577,6 +665,50 @@ document.addEventListener('mouseup', () => {
   }
 });
 
+// Vertical resize drag (drag horizontally to change the vertical strip width)
+function applyVerticalWidth(width) {
+  verticalWidth = Math.max(MIN_VERTICAL_WIDTH, Math.min(MAX_VERTICAL_WIDTH, width));
+  ipcRenderer.send('resize-vertical-window', {
+    width: Math.round(verticalWidth),
+    side: settings && settings.mode === 'vertical-left' ? 'left' : 'right'
+  });
+}
+
+const verticalResizeGrip = document.getElementById('vertical-resize-grip');
+let isResizingVert = false;
+let vertResizeStartX = 0;
+let vertResizeStartW = 90;
+
+if (verticalResizeGrip) {
+  verticalResizeGrip.addEventListener('mousedown', (e) => {
+    isResizingVert  = true;
+    vertResizeStartX = e.screenX;
+    vertResizeStartW = verticalWidth;
+    e.preventDefault();
+  });
+}
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizingVert) return;
+  // For right-docked: dragging left (negative delta) increases width.
+  // For left-docked:  dragging right (positive delta) increases width.
+  const isLeft = settings && settings.mode === 'vertical-left';
+  const delta  = isLeft
+    ? (e.screenX - vertResizeStartX)
+    : (vertResizeStartX - e.screenX);
+  applyVerticalWidth(vertResizeStartW + delta);
+});
+
+document.addEventListener('mouseup', () => {
+  if (!isResizingVert) return;
+  isResizingVert = false;
+  if (settings) {
+    settings.verticalWidth = verticalWidth;
+    saveSettingsToDisk(settings);
+  }
+});
+
 // Apply saved sizes on load
-if (settings?.circularSize) applyCircularSize(settings.circularSize);
-if (settings?.barHeight)    applyBarHeight(settings.barHeight);
+if (settings?.circularSize)  applyCircularSize(settings.circularSize);
+if (settings?.barHeight)     applyBarHeight(settings.barHeight);
+if (settings?.verticalWidth) verticalWidth = settings.verticalWidth;

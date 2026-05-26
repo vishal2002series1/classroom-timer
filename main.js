@@ -10,6 +10,7 @@ let currentSettings = {
   mode: 'circular',
   duration: 60,
   sound: true,
+  verticalWidth: 90,
   zones: [
     { label: 'Exam Topper',     threshold: 75, color: '#27ae60' },
     { label: 'Exam Qualifier',  threshold: 50, color: '#f39c12' },
@@ -19,18 +20,38 @@ let currentSettings = {
 };
 
 function createTimerWindow() {
-  const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
-  const isBar = currentSettings.mode === 'bar';
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+  const mode = currentSettings.mode;
+  const isBar          = mode === 'bar';
+  const isVerticalR    = mode === 'vertical';        // docked right (kept name for compat)
+  const isVerticalL    = mode === 'vertical-left';   // docked left
+  const isVertical     = isVerticalR || isVerticalL;
 
   const MIN_WINDOW_WIDTH = 460; // keep in sync with timer.js
-  const BAR_CONTROLS_H   = 40;  // height reserved for the bar's controls row
-  const dialSize = currentSettings.circularSize || 320;
-  const stripH   = currentSettings.barHeight || 56;
+  const BAR_CONTROLS_H   = 40;
+  const dialSize  = currentSettings.circularSize || 320;
+  const stripH    = currentSettings.barHeight    || 56;
+  const stripW    = currentSettings.verticalWidth || 90;
+
+  let winW, winH, winX, winY;
+  if (isBar) {
+    winW = screenWidth; winH = stripH + BAR_CONTROLS_H; winX = 0; winY = 0;
+  } else if (isVertical) {
+    winW = stripW;
+    winH = screenHeight;
+    winX = isVerticalL ? 0 : (screenWidth - stripW);
+    winY = 0;
+  } else {
+    winW = Math.max(MIN_WINDOW_WIDTH, dialSize);
+    winH = dialSize + 70;
+    winX = 40; winY = 40;
+  }
+
   timerWindow = new BrowserWindow({
-    width:  isBar ? screenWidth : Math.max(MIN_WINDOW_WIDTH, dialSize),
-    height: isBar ? (stripH + BAR_CONTROLS_H) : (dialSize + 70),
-    x: isBar ? 0 : 40,
-    y: isBar ? 0 : 40,
+    width:  winW,
+    height: winH,
+    x: winX,
+    y: winY,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -164,6 +185,16 @@ ipcMain.on('resize-bar-window', (event, { height }) => {
     const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
     timerWindow.setSize(screenWidth, Math.round(height) + BAR_CONTROLS_H);
     timerWindow.setPosition(0, 0);
+  }
+});
+
+ipcMain.on('resize-vertical-window', (event, { width, side }) => {
+  if (timerWindow) {
+    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    const w = Math.round(width);
+    timerWindow.setSize(w, screenHeight);
+    const x = side === 'left' ? 0 : (screenWidth - w);
+    timerWindow.setPosition(x, 0);
   }
 });
 
