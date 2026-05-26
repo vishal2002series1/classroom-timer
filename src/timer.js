@@ -101,7 +101,7 @@ function applySettings(s) {
   circularSize = s.circularSize;
   canvas.width  = circularSize;
   canvas.height = circularSize;
-  circularWidget.style.width  = `${circularSize}px`;
+  circularWidget.style.width  = `${Math.max(MIN_WINDOW_WIDTH, circularSize)}px`;
   circularWidget.style.height = `${circularSize + 70}px`;
   const centerDisplay = document.getElementById('center-display');
   if (centerDisplay) {
@@ -429,7 +429,7 @@ function applyCircularSize(size) {
 //   canvas.height = Math.round(circularSize * 0.94);
 
   // Resize the widget container
-  circularWidget.style.width  = `${circularSize}px`;
+  circularWidget.style.width  = `${Math.max(MIN_WINDOW_WIDTH, circularSize)}px`;
   circularWidget.style.height = `${circularSize + 70}px`;
 
   // Reposition center display

@@ -299,21 +299,24 @@ html, body { height: 100%; }
   white-space: nowrap;
 }
 
+/* 8 buttons arranged in a 4-column × 2-row grid so they always fit
+   inside a narrow vertical panel without clipping. */
 #vertical-controls {
-  flex: 0 0 40px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  flex: 0 0 64px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 28px;
   gap: 4px;
-  padding: 0 4px;
+  padding: 4px;
   background: rgba(15,15,25,0.92);
   z-index: 20;
-  flex-wrap: wrap;
+  align-content: center;
+  justify-items: center;
 }
 
 #vertical-controls button {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: none;
   background: rgba(255,255,255,0.12);
@@ -321,6 +324,10 @@ html, body { height: 100%; }
   font-size: 0.7rem;
   cursor: pointer;
   transition: background 0.2s;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #vertical-controls button:hover {

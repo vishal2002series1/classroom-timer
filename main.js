@@ -1,9 +1,24 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 
+// Ensure only one instance of the app runs at a time. If the user launches
+// the executable again, focus the existing window instead of opening a new one.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.exit(0);
+}
+
 let timerWindow = null;
 let settingsWindow = null;
 let isRebuildingWindow = false;
+
+app.on('second-instance', () => {
+  if (timerWindow) {
+    if (timerWindow.isMinimized()) timerWindow.restore();
+    timerWindow.show();
+    timerWindow.focus();
+  }
+});
 
 // Default settings
 let currentSettings = {
