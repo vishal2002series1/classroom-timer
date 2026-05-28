@@ -1,5 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 // Ensure only one instance of the app runs at a time. If the user launches
 // the executable again, focus the existing window instead of opening a new one.
@@ -8,7 +10,7 @@ if (!gotTheLock) {
   app.exit(0);
 }
 
-// FIX 1: Disable Hardware Acceleration to prevent graphical clipping
+// FIX: Disable Hardware Acceleration to prevent graphical clipping
 // on frameless transparent windows in Windows OS.
 app.disableHardwareAcceleration();
 
@@ -38,15 +40,30 @@ let currentSettings = {
   ]
 };
 
+// FIX: Load settings from disk before window creation so main.js knows
+// the correct window size to generate on boot.
+const settingsPath = path.join(os.homedir(), '.classroom-timer-settings.json');
+
+function loadSettingsFromDisk() {
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const diskData = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      currentSettings = { ...currentSettings, ...diskData };
+    }
+  } catch (e) {
+    console.error("Failed to load settings in main process:", e);
+  }
+}
+
 function createTimerWindow() {
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
   const mode = currentSettings.mode;
   const isBar          = mode === 'bar';
-  const isVerticalR    = mode === 'vertical';        // docked right (kept name for compat)
-  const isVerticalL    = mode === 'vertical-left';   // docked left
+  const isVerticalR    = mode === 'vertical';        
+  const isVerticalL    = mode === 'vertical-left';   
   const isVertical     = isVerticalR || isVerticalL;
 
-  const MIN_WINDOW_WIDTH = 460; // keep in sync with timer.js
+  const MIN_WINDOW_WIDTH = 460; 
   const BAR_CONTROLS_H   = 40;
   const dialSize  = currentSettings.circularSize || 320;
   const stripH    = currentSettings.barHeight    || 56;
@@ -67,9 +84,6 @@ function createTimerWindow() {
   }
 
   timerWindow = new BrowserWindow({
-    // useContentSize makes width/height refer to the web content area on every
-    // platform — without this, Windows treats them as outer dimensions and the
-    // window ends up larger than intended.
     useContentSize: true,
     width:  winW,
     height: winH,
@@ -82,7 +96,7 @@ function createTimerWindow() {
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: false,
-    show: false,                    // ← hidden until fully sized + painted
+    show: false,                    
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -90,23 +104,18 @@ function createTimerWindow() {
     }
   });
 
-  // Force exact content size on every platform after construction.
   timerWindow.setContentSize(winW, winH);
   timerWindow.setPosition(winX, winY);
 
   timerWindow.loadFile(path.join(__dirname, 'src/timer.html'));
   timerWindow.setAlwaysOnTop(true, 'screen-saver');
 
-  // FIX 2: Show only when the renderer has painted at least one frame at the
-  // correct size. We removed the redundant setContentSize/setPosition calls 
-  // here because they cause a GPU buffer desync that chops the UI in half.
   timerWindow.once('ready-to-show', () => {
     timerWindow.show();
   });
 
   timerWindow.on('closed', () => {
     timerWindow = null;
-    // Only quit if we are NOT rebuilding the window
     if (!isRebuildingWindow) {
       app.quit();
     }
@@ -134,7 +143,6 @@ function createSettingsWindow() {
 
   settingsWindow.loadFile(path.join(__dirname, 'src/settings.html'));
 
-  // Send current settings once page is ready
   settingsWindow.webContents.on('did-finish-load', () => {
     settingsWindow.webContents.send('load-settings', currentSettings);
   });
@@ -161,14 +169,12 @@ ipcMain.on('save-settings', (event, newSettings) => {
   const modeChanged = newSettings.mode !== currentSettings.mode;
   currentSettings = newSettings;
 
-  // Close settings first
   if (settingsWindow) {
     settingsWindow.destroy();
     settingsWindow = null;
   }
 
   if (modeChanged) {
-    // Flag so the closed event doesn't trigger app.quit()
     isRebuildingWindow = true;
 
     if (timerWindow) {
@@ -176,14 +182,12 @@ ipcMain.on('save-settings', (event, newSettings) => {
       timerWindow = null;
     }
 
-    // Small delay to let destroy complete cleanly
     setTimeout(() => {
       isRebuildingWindow = false;
       createTimerWindow();
     }, 150);
 
   } else {
-    // Same mode — just push new settings to timer
     if (timerWindow) {
       timerWindow.webContents.send('apply-settings', currentSettings);
     }
@@ -212,15 +216,13 @@ ipcMain.on('switch-mode', (event, newSettings) => {
 
 ipcMain.on('resize-window', (event, { width, height }) => {
   if (timerWindow) {
-    // setContentSize sizes the inner web content area on every platform,
-    // avoiding Windows' outer-frame/DPI inflation.
     timerWindow.setContentSize(Math.round(width), Math.round(height));
   }
 });
 
 ipcMain.on('resize-bar-window', (event, { height }) => {
   if (timerWindow) {
-    const BAR_CONTROLS_H = 40; // matches createTimerWindow
+    const BAR_CONTROLS_H = 40; 
     const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
     timerWindow.setContentSize(screenWidth, Math.round(height) + BAR_CONTROLS_H);
     timerWindow.setPosition(0, 0);
@@ -238,13 +240,14 @@ ipcMain.on('resize-vertical-window', (event, { width, side }) => {
 });
 
 ipcMain.on('exit-app', () => {
-  isRebuildingWindow = false; // clear flag so quit isn't blocked
+  isRebuildingWindow = false; 
   if (settingsWindow) settingsWindow.destroy();
   if (timerWindow) timerWindow.destroy();
-  app.exit(0); // force exit
+  app.exit(0); 
 });
 
 app.whenReady().then(() => {
+  loadSettingsFromDisk(); // <--- FIX: Ensure main process matches the saved state
   createTimerWindow();
 });
 
