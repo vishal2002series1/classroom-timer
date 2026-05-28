@@ -8,6 +8,10 @@ if (!gotTheLock) {
   app.exit(0);
 }
 
+// FIX 1: Disable Hardware Acceleration to prevent graphical clipping
+// on frameless transparent windows in Windows OS.
+app.disableHardwareAcceleration();
+
 let timerWindow = null;
 let settingsWindow = null;
 let isRebuildingWindow = false;
@@ -93,14 +97,10 @@ function createTimerWindow() {
   timerWindow.loadFile(path.join(__dirname, 'src/timer.html'));
   timerWindow.setAlwaysOnTop(true, 'screen-saver');
 
-  // Show only when the renderer has painted at least one frame at the
-  // correct size. This is what eliminates the "half-cut dial" flash on
-  // Windows: ready-to-show fires after layout + first paint.
+  // FIX 2: Show only when the renderer has painted at least one frame at the
+  // correct size. We removed the redundant setContentSize/setPosition calls 
+  // here because they cause a GPU buffer desync that chops the UI in half.
   timerWindow.once('ready-to-show', () => {
-    // Re-assert size one more time in case Windows DPI adjusted it
-    // during the load, then show.
-    timerWindow.setContentSize(winW, winH);
-    timerWindow.setPosition(winX, winY);
     timerWindow.show();
   });
 
