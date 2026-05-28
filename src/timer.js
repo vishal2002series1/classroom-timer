@@ -79,6 +79,9 @@ ipcRenderer.on('apply-settings', (event, s) => {
 });
 
 function applySettings(s) {
+  // Migrate old saved mode names that no longer exist.
+  if (s.mode === 'vertical-left') s.mode = 'vertical';
+
   settings         = s;
   totalSeconds     = s.duration;
   remainingSeconds = s.duration;
@@ -141,8 +144,8 @@ document.getElementById('vert-btn-mode').addEventListener('click', toggleMode);
 
 function toggleMode() {
   if (!settings) return;
-  // Cycle: circular → bar → vertical (right) → vertical (left) → circular
-  const order = ['circular', 'bar', 'vertical', 'vertical-left'];
+  // Cycle: circular → bar → vertical → circular
+  const order = ['circular', 'bar', 'vertical'];
   const idx   = order.indexOf(settings.mode);
   settings.mode = order[(idx + 1) % order.length];
   // Save current sizes into settings before switching
@@ -343,7 +346,7 @@ function render() {
   if (settings.mode === 'circular') {
     timeDisplay.textContent = formatted;
     drawDial(pct, zone);
-  } else if (settings.mode === 'vertical') {
+  } else if (settings.mode === 'vertical' || settings.mode === 'vertical-left') {
     renderVertical(pct, zone, formatted);
   } else {
     renderBar(pct, zone, formatted);

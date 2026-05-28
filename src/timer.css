@@ -32,6 +32,7 @@ button {
 
 #dial {
   display: block;
+  margin: 0 auto;        /* keep the canvas centered inside the wider container */
 }
 
 #center-display {
@@ -56,15 +57,18 @@ button {
 #controls {
   display: flex;
   gap: 8px;
-  margin-top: 6px;
+  margin: 6px auto 0;          /* horizontal auto = always centered, even on Windows */
   padding: 6px 12px;
   background: rgba(15,15,25,0.75);
   border-radius: 30px;
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  width: 384px;          /* 8 × 36px buttons + 7 × 8px gaps + 24px padding */
+  width: 384px;                /* 8 × 36px buttons + 7 × 8px gaps + 24px padding */
   flex: 0 0 auto;
+  flex-shrink: 0;              /* never compress, even if container is briefly narrower */
   justify-content: center;
+  align-self: center;
+  box-sizing: border-box;
 }
 
 #controls button {

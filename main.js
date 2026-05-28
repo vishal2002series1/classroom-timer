@@ -63,6 +63,10 @@ function createTimerWindow() {
   }
 
   timerWindow = new BrowserWindow({
+    // useContentSize makes width/height refer to the web content area on every
+    // platform — without this, Windows treats them as outer dimensions and the
+    // window ends up larger than intended.
+    useContentSize: true,
     width:  winW,
     height: winH,
     x: winX,
@@ -70,17 +74,35 @@ function createTimerWindow() {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
+    hasShadow: false,
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: false,
+    show: false,                    // ← hidden until fully sized + painted
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      backgroundThrottling: false
     }
   });
 
+  // Force exact content size on every platform after construction.
+  timerWindow.setContentSize(winW, winH);
+  timerWindow.setPosition(winX, winY);
+
   timerWindow.loadFile(path.join(__dirname, 'src/timer.html'));
   timerWindow.setAlwaysOnTop(true, 'screen-saver');
+
+  // Show only when the renderer has painted at least one frame at the
+  // correct size. This is what eliminates the "half-cut dial" flash on
+  // Windows: ready-to-show fires after layout + first paint.
+  timerWindow.once('ready-to-show', () => {
+    // Re-assert size one more time in case Windows DPI adjusted it
+    // during the load, then show.
+    timerWindow.setContentSize(winW, winH);
+    timerWindow.setPosition(winX, winY);
+    timerWindow.show();
+  });
 
   timerWindow.on('closed', () => {
     timerWindow = null;
@@ -190,7 +212,9 @@ ipcMain.on('switch-mode', (event, newSettings) => {
 
 ipcMain.on('resize-window', (event, { width, height }) => {
   if (timerWindow) {
-    timerWindow.setSize(Math.round(width), Math.round(height));
+    // setContentSize sizes the inner web content area on every platform,
+    // avoiding Windows' outer-frame/DPI inflation.
+    timerWindow.setContentSize(Math.round(width), Math.round(height));
   }
 });
 
@@ -198,7 +222,7 @@ ipcMain.on('resize-bar-window', (event, { height }) => {
   if (timerWindow) {
     const BAR_CONTROLS_H = 40; // matches createTimerWindow
     const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
-    timerWindow.setSize(screenWidth, Math.round(height) + BAR_CONTROLS_H);
+    timerWindow.setContentSize(screenWidth, Math.round(height) + BAR_CONTROLS_H);
     timerWindow.setPosition(0, 0);
   }
 });
@@ -207,7 +231,7 @@ ipcMain.on('resize-vertical-window', (event, { width, side }) => {
   if (timerWindow) {
     const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
     const w = Math.round(width);
-    timerWindow.setSize(w, screenHeight);
+    timerWindow.setContentSize(w, screenHeight);
     const x = side === 'left' ? 0 : (screenWidth - w);
     timerWindow.setPosition(x, 0);
   }
